@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Frontend on Ubuntu VM</title>
+  </head>
+  <body>
+    <h1>Frontend (Ubuntu Apache)</h1>
+    <p id="data">Loading data from Windows backend...</p>
+    <script>
+      // When VM uses NAT, host (Windows) is reachable at 10.0.2.2
+      fetch("http://10.106.7.162:5001/hello")
+        .then((res) => res.text())
+        .then((text) => {
+          document.getElementById("data").innerText = text;
+        })
+        .catch((err) => {
+          console.error("Fetch error:", err);
+          document.getElementById("data").innerText =
+            "Failed to contact backend.";
+        });
+    </script>
+  </body>
+</html>

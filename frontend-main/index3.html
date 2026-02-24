@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Backend Monitoring Dashboard</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+      /* Reset */
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: #f4f6f9;
+        color: #212529;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+      }
+
+      header {
+        width: 100%;
+        background: #343a40;
+        color: #fff;
+        padding: 15px 30px;
+        font-size: 1.4rem;
+        font-weight: bold;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+
+      main {
+        flex: 1;
+        padding: 30px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        grid-gap: 25px;
+      }
+
+      .card {
+        background: #fff;
+        border-radius: 16px;
+        padding: 20px;
+        box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+        transition: transform 0.2s ease-in-out;
+      }
+
+      .card:hover {
+        transform: translateY(-5px);
+      }
+
+      .card h2 {
+        font-size: 1.2rem;
+        margin-bottom: 15px;
+        color: #495057;
+      }
+
+      .status {
+        font-size: 1rem;
+        padding: 12px;
+        border-radius: 10px;
+        margin-top: 5px;
+        font-weight: bold;
+      }
+
+      .online {
+        color: #198754;
+      }
+      .offline {
+        color: #dc3545;
+      }
+
+      /* Logs */
+      .logs {
+        max-height: 200px;
+        overflow-y: auto;
+        font-size: 0.9rem;
+        line-height: 1.5;
+      }
+      .logs div {
+        margin-bottom: 6px;
+      }
+
+      /* Resource bars */
+      .progress-container {
+        background: #e9ecef;
+        border-radius: 8px;
+        height: 18px;
+        overflow: hidden;
+        margin: 8px 0;
+      }
+      .progress-bar {
+        height: 100%;
+        text-align: right;
+        padding-right: 5px;
+        color: #fff;
+        font-size: 0.75rem;
+        line-height: 18px;
+      }
+      .cpu {
+        background: #0d6efd;
+      }
+      .ram {
+        background: #20c997;
+      }
+      .disk {
+        background: #fd7e14;
+      }
+
+      footer {
+        text-align: center;
+        padding: 15px;
+        background: #e9ecef;
+        font-size: 0.9rem;
+        color: #6c757d;
+      }
+
+      /* Spinner */
+      .spinner {
+        border: 4px solid #f3f3f3;
+        border-top: 4px solid #0d6efd;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        animation: spin 1s linear infinite;
+        display: inline-block;
+        margin-left: 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      🌐 Backend Monitoring Dashboard
+      <span id="clock"></span>
+    </header>
+
+    <main>
+      <!-- Backend Status -->
+      <div class="card">
+        <h2>Backend Status</h2>
+        <div id="status" class="status">
+          Checking... <span class="spinner"></span>
+        </div>
+        <h2>Response Time</h2>
+        <div id="response-time" class="status">-- ms</div>
+      </div>
+
+      <!-- Uptime History -->
+      <div class="card">
+        <h2>Uptime History</h2>
+        <div id="logs" class="logs"></div>
+      </div>
+
+      <!-- Uptime Chart -->
+      <div class="card">
+        <h2>Uptime Trend</h2>
+        <canvas id="uptimeChart" height="200"></canvas>
+      </div>
+
+      <!-- System Usage -->
+      <div class="card">
+        <h2>System Resources</h2>
+        <p>CPU Usage</p>
+        <div class="progress-container">
+          <div id="cpu-bar" class="progress-bar cpu" style="width: 0%">0%</div>
+        </div>
+        <p>RAM Usage</p>
+        <div class="progress-container">
+          <div id="ram-bar" class="progress-bar ram" style="width: 0%">0%</div>
+        </div>
+        <p>Disk Usage</p>
+        <div class="progress-container">
+          <div id="disk-bar" class="progress-bar disk" style="width: 0%">
+            0%
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <footer>
+      Powered by Ubuntu Frontend + Windows Backend | Auto-refresh every 10s
+    </footer>
+
+    <script>
+      const statusEl = document.getElementById("status");
+      const responseEl = document.getElementById("response-time");
+      const logsEl = document.getElementById("logs");
+
+      // Chart.js setup
+      const ctx = document.getElementById("uptimeChart").getContext("2d");
+      const uptimeChart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: [],
+          datasets: [
+            {
+              label: "Response Time (ms)",
+              data: [],
+              borderColor: "#0d6efd",
+              fill: false,
+              tension: 0.3,
+            },
+          ],
+        },
+        options: {
+          scales: {
+            y: { beginAtZero: true },
+          },
+        },
+      });
+
+      // Function to fetch backend status
+      async function checkBackend() {
+        const start = Date.now();
+        try {
+          const res = await fetch("http://10.106.7.162:5001/hello");
+          const text = await res.text();
+          const duration = Date.now() - start;
+
+          statusEl.innerHTML = `<span class="online">✅ Online</span>`;
+          responseEl.innerHTML = `<span class="online">${duration} ms</span>`;
+
+          addLog(`✅ Online (${duration} ms)`);
+          updateChart(duration);
+        } catch (err) {
+          const duration = Date.now() - start;
+          statusEl.innerHTML = `<span class="offline">❌ Offline</span>`;
+          responseEl.innerHTML = `<span class="offline">--</span>`;
+
+          addLog("❌ Offline");
+          updateChart(0);
+        }
+      }
+
+      // Add log
+      function addLog(message) {
+        const time = new Date().toLocaleTimeString();
+        const entry = document.createElement("div");
+        entry.textContent = `${time} - ${message}`;
+        logsEl.prepend(entry);
+
+        // keep only last 5
+        while (logsEl.children.length > 5) {
+          logsEl.removeChild(logsEl.lastChild);
+        }
+      }
+
+      // Update chart
+      function updateChart(value) {
+        const time = new Date().toLocaleTimeString();
+        uptimeChart.data.labels.push(time);
+        uptimeChart.data.datasets[0].data.push(value);
+
+        if (uptimeChart.data.labels.length > 10) {
+          uptimeChart.data.labels.shift();
+          uptimeChart.data.datasets[0].data.shift();
+        }
+
+        uptimeChart.update();
+      }
+
+      // Fake system usage generator
+      function updateSystemUsage() {
+        const cpu = Math.floor(Math.random() * 100);
+        const ram = Math.floor(Math.random() * 100);
+        const disk = Math.floor(Math.random() * 100);
+
+        document.getElementById("cpu-bar").style.width = cpu + "%";
+        document.getElementById("cpu-bar").textContent = cpu + "%";
+
+        document.getElementById("ram-bar").style.width = ram + "%";
+        document.getElementById("ram-bar").textContent = ram + "%";
+
+        document.getElementById("disk-bar").style.width = disk + "%";
+        document.getElementById("disk-bar").textContent = disk + "%";
+      }
+
+      // Live clock
+      function updateClock() {
+        document.getElementById("clock").textContent =
+          new Date().toLocaleTimeString();
+      }
+
+      // Initial + interval refresh
+      checkBackend();
+      updateSystemUsage();
+      updateClock();
+
+      setInterval(checkBackend, 10000); // every 10s
+      setInterval(updateSystemUsage, 5000);
+      setInterval(updateClock, 1000);
+    </script>
+  </body>
+</html>
